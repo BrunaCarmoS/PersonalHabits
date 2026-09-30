@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum HabitCategory {
+  COUNT
+  QUIT
+  DIARY
+  MOOD
+  WEIGHT
+  CUSTOM
+}
+
+enum TrackingType {
+  NUMERIC
+  CHECKLIST
+  TIMER
+  QUIT_STREAK
+  MOOD_SCALE
+}
+
+enum GoalPolarity {
+  POSITIVE
+  NEGATIVE
+}
+
+enum FrequencyType {
+  DAILY
+  WEEKDAYS
+  X_PER_WEEK
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model HabitList {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now())
+
+  habits         Habit[]
+  tasks          Task[]
+  journalEntries JournalEntry[]
+
+  @@map("habit_lists")
+}
+
+model Habit {
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
+
+  category      HabitCategory @default(CUSTOM)
+  trackingType  TrackingType  @default(CHECKLIST)
+  goalPolarity  GoalPolarity  @default(POSITIVE)
+
+  frequency     FrequencyType @default(DAILY)
+  weekdays      String?
+  timesPerWeek  Int?
+  timesPerDay   Int?
+
+  unit          String?
+  goal          Float?
+  timerSeconds  Int?
+  startDate     DateTime?
+
+  color         String        @default("#6366f1")
+  icon          String        @default("check-circle")
+  priority      TaskPriority  @default(MEDIUM)
+  pinned        Boolean       @default(false)
+  active        Boolean       @default(true)
+
+  listId        String?
+  list          HabitList?    @relation(fields: [listId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  logs           HabitLog[]
+  journalEntries JournalEntry[]
+
+  @@map("habits")
+}
+
+model HabitLog {
+  id        String   @id @default(cuid())
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  completed Boolean  @default(false)
+  count     Int      @default(0)
+  value     Float?
+  notes     String?
+
+  loggedAt  DateTime @default(now())
+
+  @@unique([habitId, date])
+  @@map("habit_logs")
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+
+  dueDate     DateTime?
+  dueTime     String?
+
+  priority    TaskPriority @default(MEDIUM)
+  pinned      Boolean      @default(false)
+
+  listId      String?
+  list        HabitList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
+
+  completed   Boolean      @default(false)
+  completedAt DateTime?
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  journalEntries JournalEntry[]
+
+  @@map("tasks")
+}
+
+model JournalEntry {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  habitId   String?
+  habit     Habit?   @relation(fields: [habitId], references: [id], onDelete: SetNull)
+
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  listId    String?
+  list      HabitList? @relation(fields: [listId], references: [id], onDelete: SetNull)
+
+  @@map("journal_entries")
+}
