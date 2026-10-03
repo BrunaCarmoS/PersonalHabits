@@ -1,14 +1,21 @@
-interface ScheduleCheck {
-  frequency: string;
+import type { Frequency } from "./types";
+
+export interface ScheduledHabit {
+  frequency: Frequency;
   weekdays: string | null;
 }
 
-export function isHabitScheduledForDate(habit: ScheduleCheck, date: Date): boolean {
-  if (habit.frequency === "DAILY") return true;
-  if (habit.frequency === "WEEKDAYS") {
-    if (!habit.weekdays) return false;
-    const days = habit.weekdays.split(",").map(Number);
-    return days.includes(date.getDay());
-  }
+/** "1,3,5" → [1, 3, 5] (0 = domingo). Ignora valores inválidos. */
+export function parseWeekdays(weekdays: string | null): number[] {
+  if (!weekdays) return [];
+  return weekdays
+    .split(",")
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+}
+
+/** O hábito aparece nesse dia? (X_PER_WEEK pode ser feito em qualquer dia da semana.) */
+export function isHabitScheduledForDate(habit: ScheduledHabit, date: Date): boolean {
+  if (habit.frequency === "WEEKDAYS") return parseWeekdays(habit.weekdays).includes(date.getDay());
   return true;
 }

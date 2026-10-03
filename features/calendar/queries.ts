@@ -3,7 +3,7 @@ import { toDateOnly, toEndOfDay } from "@/lib/dates";
 
 export async function getHabitsForMonth(monthStart: Date, monthEnd: Date) {
   return prisma.habit.findMany({
-    where: { active: true },
+    where: { active: true, category: { not: "QUIT" } },
     include: {
       logs: {
         where: { date: { gte: toDateOnly(monthStart), lte: toEndOfDay(monthEnd) } },

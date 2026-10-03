@@ -1,11 +1,19 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { toDateOnly, previousDay } from "@/lib/dates";
-import { calculateStreak } from "@/lib/streak";
+import { daysBefore, isSameDate, toDateOnly } from "@/lib/dates";
+import { MEASUREMENT_CATEGORIES, NON_DAILY_CATEGORIES } from "@/lib/habit-groups";
+import { isHabitScheduledForDate } from "@/lib/habit-schedule";
+import { STREAK_LOOKBACK_DAYS, calculateStreak } from "@/lib/streak";
+
+const HABIT_ORDER: Prisma.HabitOrderByWithRelationInput[] = [
+  { pinned: "desc" },
+  { createdAt: "asc" },
+];
 
 export async function getHabits() {
   return prisma.habit.findMany({
     where: { active: true },
-    orderBy: [{ pinned: "desc" }, { createdAt: "asc" }],
+    orderBy: HABIT_ORDER,
     include: { list: true },
   });
 }
@@ -14,62 +22,54 @@ export async function getHabitLists() {
   return prisma.habitList.findMany({ orderBy: { name: "asc" } });
 }
 
-/** Hábitos "diários" (checklist/contagem) do dia, com a sequência (streak) calculada */
-export async function getDailyHabitsForToday(date: Date) {
-  const dateOnly = toDateOnly(date);
-  const historyStart = previousDay(new Date(dateOnly.getTime() - 400 * 86400000));
+/** Hábitos "diários" (checklist/contagem) agendados para o dia, com a sequência calculada */
+export async function getDailyHabits(date: Date) {
+  const day = toDateOnly(date);
 
   const habits = await prisma.habit.findMany({
-    where: {
-      active: true,
-      NOT: { category: { in: ["WEIGHT", "MOOD", "DIARY", "QUIT"] } },
-    },
-    orderBy: [{ pinned: "desc" }, { createdAt: "asc" }],
+    where: { active: true, category: { notIn: NON_DAILY_CATEGORIES } },
+    orderBy: HABIT_ORDER,
     include: {
-      logs: { where: { date: { gte: historyStart, lte: dateOnly } } },
+      logs: { where: { date: { gte: daysBefore(day, STREAK_LOOKBACK_DAYS + 7), lte: day } } },
     },
   });
 
-  return habits.map((h) => {
-    const todayLog = h.logs.find((l) => toDateOnly(new Date(l.date)).getTime() === dateOnly.getTime()) ?? null;
-    const streak = calculateStreak(h, h.logs, date);
-    return { ...h, todayLog, streak };
-  });
+  return habits
+    .filter((habit) => isHabitScheduledForDate(habit, day))
+    .map((habit) => ({
+      ...habit,
+      todayLog: habit.logs.find((log) => isSameDate(log.date, day)) ?? null,
+      streak: calculateStreak(habit, habit.logs, day),
+    }));
 }
 
 /** Hábitos "outros" de medição (peso, humor, diário) com o último valor registrado */
 export async function getMeasurementHabits() {
   const habits = await prisma.habit.findMany({
-    where: { active: true, category: { in: ["WEIGHT", "MOOD", "DIARY"] } },
-    orderBy: [{ pinned: "desc" }, { createdAt: "asc" }],
-    include: {
-      logs: { orderBy: { date: "desc" }, take: 30 },
-    },
+    where: { active: true, category: { in: MEASUREMENT_CATEGORIES } },
+    orderBy: HABIT_ORDER,
+    include: { logs: { orderBy: { date: "desc" }, take: 30 } },
   });
 
-  return habits.map((h) => ({
-    ...h,
-    latestValue: h.logs[0]?.value ?? null,
-    latestDate: h.logs[0]?.date ?? null,
+  return habits.map((habit) => ({
+    ...habit,
+    latestValue: habit.logs.find((log) => log.value != null)?.value ?? null,
   }));
+}
+
+/** Hábitos arquivados (os arquivados mais recentemente primeiro) */
+export async function getArchivedHabits() {
+  return prisma.habit.findMany({
+    where: { active: false },
+    orderBy: { updatedAt: "desc" },
+    include: { list: true },
+  });
 }
 
 /** Hábitos de "parar", com a data de início da contagem */
 export async function getQuitHabits() {
   return prisma.habit.findMany({
     where: { active: true, category: "QUIT" },
-    orderBy: [{ pinned: "desc" }, { createdAt: "asc" }],
-  });
-}
-
-export async function getHabitsForWeek(weekDays: Date[]) {
-  const start = toDateOnly(weekDays[0]);
-  const end = toDateOnly(weekDays[weekDays.length - 1]);
-  return prisma.habit.findMany({
-    where: { active: true },
-    orderBy: [{ pinned: "desc" }, { createdAt: "asc" }],
-    include: {
-      logs: { where: { date: { gte: start, lte: end } } },
-    },
+    orderBy: HABIT_ORDER,
   });
 }

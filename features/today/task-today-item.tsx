@@ -1,7 +1,6 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check } from "lucide-react";
 import { toggleTaskCompleted } from "@/features/tasks/actions";
 
 interface TaskTodayItemProps {
@@ -17,9 +16,7 @@ export function TaskTodayItem({ task }: TaskTodayItemProps) {
   const [isPending, startTransition] = useTransition();
 
   function handleToggle() {
-    startTransition(async () => {
-      await toggleTaskCompleted(task.id, true);
-    });
+    startTransition(() => toggleTaskCompleted(task.id, true));
   }
 
   return (

@@ -1,9 +1,6 @@
 import type { LucideIcon } from "lucide-react";
-import { Repeat, Ban, BookOpen, Smile, Scale, Settings2 } from "lucide-react";
-
-export type HabitCategory = "COUNT" | "QUIT" | "DIARY" | "MOOD" | "WEIGHT" | "CUSTOM";
-export type TrackingType = "NUMERIC" | "CHECKLIST" | "TIMER" | "QUIT_STREAK" | "MOOD_SCALE";
-export type GoalPolarity = "POSITIVE" | "NEGATIVE";
+import { Ban, BookOpen, Repeat, Scale, Settings2, Smile } from "lucide-react";
+import type { GoalPolarity, HabitCategory, TrackingType } from "@/lib/types";
 
 export interface HabitTemplate {
   category: HabitCategory;
@@ -14,6 +11,16 @@ export interface HabitTemplate {
   goalPolarity: GoalPolarity;
   lockedTrackingType: boolean;
 }
+
+const CUSTOM_TEMPLATE: HabitTemplate = {
+  category: "CUSTOM",
+  name: "Hábito personalizado",
+  description: "Configure cada detalhe do seu jeito: tipo de acompanhamento, meta e frequência",
+  icon: Settings2,
+  trackingType: "CHECKLIST",
+  goalPolarity: "POSITIVE",
+  lockedTrackingType: false,
+};
 
 export const HABIT_TEMPLATES: HabitTemplate[] = [
   {
@@ -61,25 +68,16 @@ export const HABIT_TEMPLATES: HabitTemplate[] = [
     goalPolarity: "POSITIVE",
     lockedTrackingType: true,
   },
-  {
-    category: "CUSTOM",
-    name: "Hábito personalizado",
-    description: "Configure cada detalhe do seu jeito: tipo de acompanhamento, meta e frequência",
-    icon: Settings2,
-    trackingType: "CHECKLIST",
-    goalPolarity: "POSITIVE",
-    lockedTrackingType: false,
-  },
+  CUSTOM_TEMPLATE,
 ];
 
-export function getTemplate(category: HabitCategory): HabitTemplate {
-  return HABIT_TEMPLATES.find((t) => t.category === category) ?? HABIT_TEMPLATES[5];
+export function getTemplate(category: string): HabitTemplate {
+  return HABIT_TEMPLATES.find((t) => t.category === category) ?? CUSTOM_TEMPLATE;
 }
 
-export const TRACKING_TYPE_LABELS: Record<TrackingType, string> = {
-  NUMERIC: "Valor numérico (com meta)",
+/** Tipos de acompanhamento que fazem sentido num hábito personalizado. */
+export const CUSTOM_TRACKING_LABELS: Record<string, string> = {
   CHECKLIST: "Sim / Não (feito ou não)",
+  NUMERIC: "Valor numérico (com meta)",
   TIMER: "Cronômetro / Timer",
-  QUIT_STREAK: "Dias desde que parou",
-  MOOD_SCALE: "Escala de humor",
 };

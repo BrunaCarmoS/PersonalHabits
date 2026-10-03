@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { Check, Flame, Plus, Minus } from "lucide-react";
 import { toggleHabitLog, incrementHabitCount, decrementHabitCount } from "@/features/habits/actions";
+import type { Frequency } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface DailyHabitItemProps {
@@ -11,6 +12,7 @@ interface DailyHabitItemProps {
     name: string;
     color: string;
     timesPerDay: number | null;
+    frequency: Frequency;
     streak: number;
     todayLog: { completed: boolean; count: number } | null;
   };
@@ -30,11 +32,11 @@ export function DailyHabitItem({ habit, date }: DailyHabitItemProps) {
   }
 
   function handleIncrement() {
-    startTransition(() => incrementHabitCount(habit.id, date, target));
+    startTransition(() => incrementHabitCount(habit.id, date));
   }
 
   function handleDecrement() {
-    startTransition(() => decrementHabitCount(habit.id, date, target));
+    startTransition(() => decrementHabitCount(habit.id, date));
   }
 
   return (
@@ -69,6 +71,7 @@ export function DailyHabitItem({ habit, date }: DailyHabitItemProps) {
         <span className="flex items-center gap-1 text-xs text-orange-500 font-medium shrink-0">
           <Flame className="h-3.5 w-3.5" />
           {habit.streak}
+          {habit.frequency === "X_PER_WEEK" && <span>sem</span>}
         </span>
       )}
 

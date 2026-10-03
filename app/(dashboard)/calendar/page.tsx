@@ -5,7 +5,7 @@ import { DayView } from "@/features/calendar/day-view";
 import { WeekView } from "@/features/calendar/week-view";
 import { parseMonthParam, parseDateParam } from "@/lib/dates";
 
-type CalendarViewMode = "daily" | "weekly" | "monthly";
+const CALENDAR_VIEWS = ["daily", "weekly", "monthly"] as const;
 
 export default async function CalendarPage({
   searchParams,
@@ -13,7 +13,7 @@ export default async function CalendarPage({
   searchParams: Promise<{ month?: string; view?: string; date?: string }>;
 }) {
   const params = await searchParams;
-  const view = (params.view ?? "monthly") as CalendarViewMode;
+  const view = CALENDAR_VIEWS.find((v) => v === params.view) ?? "monthly";
   const month = parseMonthParam(params.month);
   const date = parseDateParam(params.date);
 

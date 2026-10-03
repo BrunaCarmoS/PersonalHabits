@@ -1,41 +1,32 @@
 "use client";
 
-import { Pin, Trash2, Archive } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { useTransition } from "react";
+import { Archive, Pin, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { deleteHabit, togglePinHabit, archiveHabit } from "./actions";
-import { getTemplate } from "./habit-templates";
-import { FREQUENCY_LABELS, PRIORITY_LABELS } from "./validation";
+import { Card } from "@/components/ui/card";
+import { FREQUENCY_LABELS, PRIORITY_LABELS } from "@/lib/constants";
+import type { ListOption } from "@/lib/types";
+import { archiveHabit, deleteHabit, togglePinHabit } from "./actions";
 import { HabitEditDialog } from "./habit-edit-dialog";
+import type { EditableHabit } from "./habit-form-values";
+import { getTemplate } from "./habit-templates";
 
-interface HabitWithList {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  trackingType: string;
-  goalPolarity: string;
-  frequency: string;
-  weekdays: string | null;
-  timesPerWeek: number | null;
-  timesPerDay: number | null;
-  goal: number | null;
-  unit: string | null;
-  priority: string;
-  pinned: boolean;
-  color: string;
-  listId: string | null;
-  list: { name: string } | null;
-}
+type HabitCardData = EditableHabit & { pinned: boolean; list: { name: string } | null };
 
-interface HabitList {
-  id: string;
-  name: string;
-}
+export function HabitCard({ habit, lists }: { habit: HabitCardData; lists: ListOption[] }) {
+  const [isPending, startTransition] = useTransition();
+  const template = getTemplate(habit.category);
 
-export function HabitCard({ habit, lists }: { habit: HabitWithList; lists: HabitList[] }) {
-  const template = getTemplate(habit.category as any);
+  function handleDelete() {
+    const message = `Excluir "${habit.name}" para sempre? Todo o histórico dele também será apagado.`;
+    if (window.confirm(message)) startTransition(() => deleteHabit(habit.id));
+  }
+
+  function handleArchive() {
+    const message = `Arquivar "${habit.name}"? Ele some das telas, mas o histórico fica guardado.`;
+    if (window.confirm(message)) startTransition(() => archiveHabit(habit.id));
+  }
 
   return (
     <Card className="p-4 flex items-center justify-between gap-4">
@@ -47,13 +38,9 @@ export function HabitCard({ habit, lists }: { habit: HabitWithList; lists: Habit
             {habit.pinned && <Pin className="h-3 w-3 text-muted-foreground" />}
           </div>
           <div className="flex gap-2 mt-1 flex-wrap">
-            <Badge variant="secondary" className="text-xs">
-              {template.name}
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              {FREQUENCY_LABELS[habit.frequency]}
-            </Badge>
-            {habit.goal && (
+            <Badge variant="secondary" className="text-xs">{template.name}</Badge>
+            <Badge variant="outline" className="text-xs">{FREQUENCY_LABELS[habit.frequency]}</Badge>
+            {habit.goal != null && (
               <Badge variant="outline" className="text-xs">
                 Meta: {habit.goal} {habit.unit}
               </Badge>
@@ -64,9 +51,7 @@ export function HabitCard({ habit, lists }: { habit: HabitWithList; lists: Habit
               </Badge>
             )}
             {habit.list && (
-              <Badge variant="outline" className="text-xs">
-                {habit.list.name}
-              </Badge>
+              <Badge variant="outline" className="text-xs">{habit.list.name}</Badge>
             )}
           </div>
         </div>
@@ -74,13 +59,20 @@ export function HabitCard({ habit, lists }: { habit: HabitWithList; lists: Habit
 
       <div className="flex gap-1 shrink-0">
         <HabitEditDialog habit={habit} lists={lists} />
-        <Button variant="ghost" size="icon" onClick={() => togglePinHabit(habit.id, !habit.pinned)} title="Fixar">
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={isPending}
+          aria-pressed={habit.pinned}
+          onClick={() => startTransition(() => togglePinHabit(habit.id, !habit.pinned))}
+          title={habit.pinned ? "Desafixar" : "Fixar"}
+        >
           <Pin className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => archiveHabit(habit.id)} title="Arquivar">
+        <Button variant="ghost" size="icon" disabled={isPending} onClick={handleArchive} title="Arquivar">
           <Archive className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => deleteHabit(habit.id)} title="Excluir">
+        <Button variant="ghost" size="icon" disabled={isPending} onClick={handleDelete} title="Excluir">
           <Trash2 className="h-4 w-4 text-destructive" />
         </Button>
       </div>

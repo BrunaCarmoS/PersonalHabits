@@ -1,167 +1,139 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
-import { habitFormSchema, type HabitFormValues } from "./validation";
 import { toDateOnly } from "@/lib/dates";
+import { refreshApp } from "@/lib/revalidate";
+import { habitFormSchema, type HabitFormValues } from "./validation";
+
+/** Valida o formulário e monta os dados que vão pro banco (usado em criar e editar). */
+function buildHabitData(values: HabitFormValues) {
+  const parsed = habitFormSchema.parse(values);
+  const tracksNumbers = parsed.trackingType === "NUMERIC" || parsed.trackingType === "TIMER";
+
+  return {
+    name: parsed.name,
+    description: parsed.description || null,
+    category: parsed.category,
+    trackingType: parsed.trackingType,
+    goalPolarity: parsed.goalPolarity,
+    frequency: parsed.frequency,
+    weekdays:
+      parsed.frequency === "WEEKDAYS" && parsed.weekdays?.length
+        ? [...parsed.weekdays].sort((a, b) => a - b).join(",")
+        : null,
+    timesPerWeek: parsed.frequency === "X_PER_WEEK" ? (parsed.timesPerWeek ?? null) : null,
+    // unidade/meta/vezes por dia só fazem sentido em hábitos numéricos
+    timesPerDay: tracksNumbers ? (parsed.timesPerDay ?? null) : null,
+    unit: tracksNumbers ? parsed.unit || null : null,
+    goal: tracksNumbers ? (parsed.goal ?? null) : null,
+    color: parsed.color,
+    priority: parsed.priority,
+    listId: parsed.listId || null,
+  };
+}
 
 export async function createHabit(values: HabitFormValues) {
-  const parsed = habitFormSchema.parse(values);
-
+  const data = buildHabitData(values);
   await prisma.habit.create({
-    data: {
-      name: parsed.name,
-      description: parsed.description || null,
-      category: parsed.category,
-      trackingType: parsed.trackingType,
-      goalPolarity: parsed.goalPolarity,
-      frequency: parsed.frequency,
-      weekdays: parsed.weekdays?.length ? parsed.weekdays.join(",") : null,
-      timesPerWeek: parsed.timesPerWeek ?? null,
-      timesPerDay: parsed.timesPerDay ?? null,
-      unit: parsed.unit || null,
-      goal: parsed.goal ?? null,
-      color: parsed.color,
-      priority: parsed.priority,
-      listId: parsed.listId || null,
-    },
+    data: { ...data, startDate: data.category === "QUIT" ? new Date() : null },
   });
+  refreshApp();
+}
 
-  revalidatePath("/habits");
-  revalidatePath("/today");
+/** Editar NÃO mexe no startDate: senão renomear um hábito de "parar" zeraria a contagem. */
+export async function updateHabit(id: string, values: HabitFormValues) {
+  await prisma.habit.update({ where: { id }, data: buildHabitData(values) });
+  refreshApp();
 }
 
 export async function deleteHabit(id: string) {
   await prisma.habit.delete({ where: { id } });
-  revalidatePath("/habits");
-  revalidatePath("/today");
+  refreshApp();
 }
 
 export async function togglePinHabit(id: string, pinned: boolean) {
   await prisma.habit.update({ where: { id }, data: { pinned } });
-  revalidatePath("/habits");
-  revalidatePath("/today");
+  refreshApp();
 }
 
 export async function archiveHabit(id: string) {
   await prisma.habit.update({ where: { id }, data: { active: false } });
-  revalidatePath("/habits");
-  revalidatePath("/today");
+  refreshApp();
+}
+
+export async function restoreHabit(id: string) {
+  await prisma.habit.update({ where: { id }, data: { active: true } });
+  refreshApp();
 }
 
 export async function createHabitList(name: string) {
-  const list = await prisma.habitList.create({ data: { name } });
-  revalidatePath("/habits");
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 40) throw new Error("Nome de lista inválido.");
+  const list = await prisma.habitList.create({ data: { name: trimmed } });
+  refreshApp();
   return list;
 }
 
 /** Marca/desmarca um hábito simples (checklist) como feito num dia */
 export async function toggleHabitLog(habitId: string, date: Date, completed: boolean) {
-  const dateOnly = toDateOnly(date);
+  const day = toDateOnly(date);
+  const data = { completed, count: completed ? 1 : 0, loggedAt: new Date() };
 
   await prisma.habitLog.upsert({
-    where: { habitId_date: { habitId, date: dateOnly } },
-    update: { completed, count: completed ? 1 : 0 },
-    create: { habitId, date: dateOnly, completed, count: completed ? 1 : 0 },
+    where: { habitId_date: { habitId, date: day } },
+    update: data,
+    create: { habitId, date: day, ...data },
   });
-
-  revalidatePath("/today");
-  revalidatePath("/calendar");
-  revalidatePath("/journal");
+  refreshApp();
 }
 
-/** Incrementa a contagem de um hábito no dia (para hábitos que podem ser feitos várias vezes) */
-export async function incrementHabitCount(habitId: string, date: Date, target: number) {
-  const dateOnly = toDateOnly(date);
+/** Soma/subtrai 1 na contagem do dia (hábitos que podem ser feitos várias vezes). */
+async function adjustHabitCount(habitId: string, date: Date, delta: 1 | -1) {
+  const day = toDateOnly(date);
 
-  const existing = await prisma.habitLog.findUnique({
-    where: { habitId_date: { habitId, date: dateOnly } },
+  await prisma.$transaction(async (tx) => {
+    const habit = await tx.habit.findUnique({ where: { id: habitId }, select: { timesPerDay: true } });
+    if (!habit) return;
+
+    const existing = await tx.habitLog.findUnique({
+      where: { habitId_date: { habitId, date: day } },
+    });
+    const count = Math.max((existing?.count ?? 0) + delta, 0);
+    const data = { count, completed: count >= (habit.timesPerDay ?? 1), loggedAt: new Date() };
+
+    await tx.habitLog.upsert({
+      where: { habitId_date: { habitId, date: day } },
+      update: data,
+      create: { habitId, date: day, ...data },
+    });
   });
-
-  const newCount = (existing?.count ?? 0) + 1;
-
-  await prisma.habitLog.upsert({
-    where: { habitId_date: { habitId, date: dateOnly } },
-    update: { count: newCount, completed: newCount >= target },
-    create: { habitId, date: dateOnly, count: newCount, completed: newCount >= target },
-  });
-
-  revalidatePath("/today");
-  revalidatePath("/calendar");
-  revalidatePath("/journal");
+  refreshApp();
 }
 
-/** Diminui a contagem de um hábito no dia (botão de desfazer) */
-export async function decrementHabitCount(habitId: string, date: Date, target: number) {
-  const dateOnly = toDateOnly(date);
+export async function incrementHabitCount(habitId: string, date: Date) {
+  await adjustHabitCount(habitId, date, 1);
+}
 
-  const existing = await prisma.habitLog.findUnique({
-    where: { habitId_date: { habitId, date: dateOnly } },
-  });
-
-  const newCount = Math.max((existing?.count ?? 0) - 1, 0);
-
-  await prisma.habitLog.upsert({
-    where: { habitId_date: { habitId, date: dateOnly } },
-    update: { count: newCount, completed: newCount >= target },
-    create: { habitId, date: dateOnly, count: newCount, completed: newCount >= target },
-  });
-
-  revalidatePath("/today");
-  revalidatePath("/calendar");
-  revalidatePath("/journal");
+export async function decrementHabitCount(habitId: string, date: Date) {
+  await adjustHabitCount(habitId, date, -1);
 }
 
 /** Registra um valor num hábito de medição (Peso corporal, Humor) num dia específico */
 export async function recordHabitValue(habitId: string, date: Date, value: number, notes?: string) {
-  const dateOnly = toDateOnly(date);
+  if (!Number.isFinite(value)) throw new Error("Valor inválido.");
+  const day = toDateOnly(date);
+  const data = { value, completed: true, notes: notes?.trim() || null, loggedAt: new Date() };
 
   await prisma.habitLog.upsert({
-    where: { habitId_date: { habitId, date: dateOnly } },
-    update: { value, completed: true, notes: notes || null },
-    create: { habitId, date: dateOnly, value, completed: true, notes: notes || null },
+    where: { habitId_date: { habitId, date: day } },
+    update: data,
+    create: { habitId, date: day, ...data },
   });
-
-  revalidatePath("/today");
-  revalidatePath("/calendar");
-  revalidatePath("/journal");
-}
-
-export async function updateHabit(id: string, values: HabitFormValues) {
-  const parsed = habitFormSchema.parse(values);
-
-  await prisma.habit.update({
-    where: { id },
-    data: {
-      name: parsed.name,
-      description: parsed.description || null,
-      category: parsed.category,
-      trackingType: parsed.trackingType,
-      goalPolarity: parsed.goalPolarity,
-      frequency: parsed.frequency,
-      weekdays: parsed.weekdays?.length ? parsed.weekdays.join(",") : null,
-      timesPerWeek: parsed.timesPerWeek ?? null,
-      timesPerDay: parsed.timesPerDay ?? null,
-      unit: parsed.unit || null,
-      goal: parsed.goal ?? null,
-      color: parsed.color,
-      priority: parsed.priority,
-      listId: parsed.listId || null,
-      startDate: parsed.category === "QUIT" ? new Date() : null,
-    },
-  });
-
-  revalidatePath("/habits");
-  revalidatePath("/today");
+  refreshApp();
 }
 
 /** Zera a contagem de um hábito de "parar" (recaída): recomeça a contar a partir de agora */
 export async function resetQuitStreak(habitId: string) {
-  await prisma.habit.update({
-    where: { id: habitId },
-    data: { startDate: new Date() },
-  });
-
-  revalidatePath("/today");
-  revalidatePath("/habits");
+  await prisma.habit.update({ where: { id: habitId }, data: { startDate: new Date() } });
+  refreshApp();
 }

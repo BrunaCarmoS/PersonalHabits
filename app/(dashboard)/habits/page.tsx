@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { ArchivedHabits } from "@/features/habits/archived-habits";
 import { HabitList } from "@/features/habits/habit-list";
 
 export default function HabitsPage() {
@@ -11,6 +12,10 @@ export default function HabitsPage() {
 
       <Suspense fallback={<p className="mt-6 text-sm text-muted-foreground">Carregando...</p>}>
         <HabitList />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <ArchivedHabits />
       </Suspense>
     </div>
   );

@@ -46,8 +46,12 @@ export function NoteEditor({ tags }: { tags: TagOption[] }) {
     const taskId = selectedTag?.kind === "task" ? selectedTag.id : undefined;
     const listId = selectedTag?.kind === "list" ? selectedTag.id : undefined;
 
-    await createJournalNote(content.trim(), habitId, taskId, listId);
-    router.push("/journal");
+    try {
+      await createJournalNote(content.trim(), habitId, taskId, listId);
+      router.push("/journal");
+    } catch {
+      setIsSaving(false);
+    }
   }
 
   return (

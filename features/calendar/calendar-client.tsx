@@ -1,13 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { WEEKDAY_LABELS } from "@/lib/constants";
+import { isSameDate, isSameMonth, isToday } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { isSameDate, isToday, isSameMonth } from "@/lib/dates";
-import { toggleHabitLog } from "@/features/habits/actions";
-import { toggleTaskCompleted } from "@/features/tasks/actions";
-import { Check } from "lucide-react";
-
-const WEEKDAY_HEADERS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+import { HabitRow, UntimedTaskRow } from "./day-agenda-items";
 
 export interface DayHabit {
   id: string;
@@ -29,14 +26,18 @@ export interface DayData {
 }
 
 export function CalendarClient({ days, month }: { days: DayData[]; month: Date }) {
-  const [selected, setSelected] = useState<Date>(new Date());
+  // Hoje, se estiver no mês exibido; senão o dia 1.
+  const [selected, setSelected] = useState<Date>(() =>
+    isSameMonth(new Date(), month) ? new Date() : month
+  );
 
   const selectedDay = days.find((d) => isSameDate(d.date, selected));
+  const isEmpty = !selectedDay || (selectedDay.habits.length === 0 && selectedDay.tasks.length === 0);
 
   return (
     <div>
       <div className="grid grid-cols-7 gap-2 mb-2">
-        {WEEKDAY_HEADERS.map((label) => (
+        {WEEKDAY_LABELS.map((label) => (
           <div key={label} className="text-xs font-medium text-muted-foreground text-center py-1">
             {label}
           </div>
@@ -45,19 +46,16 @@ export function CalendarClient({ days, month }: { days: DayData[]; month: Date }
 
       <div className="grid grid-cols-7 gap-2">
         {days.map((day) => {
-          const inMonth = isSameMonth(day.date, month);
           const total = day.habits.length + day.tasks.length;
-          const isSelected = isSameDate(day.date, selected);
-
           return (
             <button
               key={day.date.toISOString()}
               onClick={() => setSelected(day.date)}
               className={cn(
                 "min-h-24 rounded-lg border p-2 flex flex-col gap-1 text-left transition-colors",
-                !inMonth && "opacity-40",
+                !isSameMonth(day.date, month) && "opacity-40",
                 isToday(day.date) && "border-primary",
-                isSelected ? "bg-primary/10 border-primary" : "hover:bg-muted/50"
+                isSameDate(day.date, selected) ? "bg-primary/10 border-primary" : "hover:bg-muted/50"
               )}
             >
               <span className={cn("text-xs font-medium", isToday(day.date) && "text-primary")}>
@@ -81,9 +79,7 @@ export function CalendarClient({ days, month }: { days: DayData[]; month: Date }
                   />
                 ))}
               </div>
-              {total > 6 && (
-                <span className="text-[10px] text-muted-foreground mt-auto">+{total - 6}</span>
-              )}
+              {total > 6 && <span className="text-[10px] text-muted-foreground mt-auto">+{total - 6}</span>}
             </button>
           );
         })}
@@ -94,7 +90,7 @@ export function CalendarClient({ days, month }: { days: DayData[]; month: Date }
           {selected.toLocaleDateString("pt-BR", { day: "numeric", month: "long" })}
         </h3>
 
-        {!selectedDay || (selectedDay.habits.length === 0 && selectedDay.tasks.length === 0) ? (
+        {isEmpty ? (
           <p className="text-sm text-muted-foreground">Nada agendado para esse dia.</p>
         ) : (
           <div className="space-y-4">
@@ -103,51 +99,17 @@ export function CalendarClient({ days, month }: { days: DayData[]; month: Date }
                 <p className="text-xs font-medium text-muted-foreground mb-2">Tarefas</p>
                 <div className="space-y-1.5">
                   {selectedDay.tasks.map((task) => (
-                    <button
-                      key={task.id}
-                      onClick={() => toggleTaskCompleted(task.id, !task.completed)}
-                      className="w-full flex items-center gap-2 rounded-md border px-3 py-2 text-left hover:bg-muted/50"
-                    >
-                      <span
-                        className={cn(
-                          "h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0",
-                          task.completed ? "border-transparent bg-foreground" : "border-muted-foreground/40"
-                        )}
-                      >
-                        {task.completed && <Check className="h-2.5 w-2.5 text-background" />}
-                      </span>
-                      <span className={cn("text-sm", task.completed && "line-through text-muted-foreground")}>
-                        {task.title}
-                      </span>
-                    </button>
+                    <UntimedTaskRow key={task.id} task={task} />
                   ))}
                 </div>
               </div>
             )}
-
             {selectedDay.habits.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Hábitos</p>
                 <div className="space-y-1.5">
                   {selectedDay.habits.map((habit) => (
-                    <button
-                      key={habit.id}
-                      onClick={() => toggleHabitLog(habit.id, selected, !habit.completed)}
-                      className="w-full flex items-center gap-2 rounded-md border px-3 py-2 text-left hover:bg-muted/50"
-                    >
-                      <span
-                        className="h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0"
-                        style={{
-                          backgroundColor: habit.completed ? habit.color : "transparent",
-                          borderColor: habit.completed ? "transparent" : undefined,
-                        }}
-                      >
-                        {habit.completed && <Check className="h-2.5 w-2.5 text-white" />}
-                      </span>
-                      <span className={cn("text-sm", habit.completed && "line-through text-muted-foreground")}>
-                        {habit.name}
-                      </span>
-                    </button>
+                    <HabitRow key={habit.id} habit={habit} date={selected} />
                   ))}
                 </div>
               </div>

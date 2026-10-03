@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { resetQuitStreak } from "@/features/habits/actions";
@@ -18,8 +18,9 @@ interface QuitItemProps {
 export function QuitItem({ habit }: QuitItemProps) {
   const [isPending, startTransition] = useTransition();
 
+  const [now] = useState(() => Date.now());
   const start = new Date(habit.startDate ?? habit.createdAt);
-  const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86400000));
+  const days = Math.max(0, Math.floor((now - start.getTime()) / 86400000));
 
   function handleRelapse() {
     if (!window.confirm(`Zerar a contagem de "${habit.name}"? Ela recomeça a partir de agora.`)) return;

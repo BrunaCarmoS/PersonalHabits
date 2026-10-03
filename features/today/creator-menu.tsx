@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Target, ListChecks } from "lucide-react";
+import { ListChecks, Plus, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,13 +11,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { HabitFormDialog } from "@/features/habits/habit-form-dialog";
 import { TaskFormDialog } from "@/features/tasks/task-form-dialog";
+import type { ListOption } from "@/lib/types";
 
-interface HabitList {
-  id: string;
-  name: string;
-}
-
-export function CreatorMenu({ lists, selectedDate }: { lists: HabitList[]; selectedDate: Date }) {
+export function CreatorMenu({ lists, defaultDate }: { lists: ListOption[]; defaultDate: string }) {
   const [openHabit, setOpenHabit] = useState(false);
   const [openTask, setOpenTask] = useState(false);
 
@@ -26,7 +22,7 @@ export function CreatorMenu({ lists, selectedDate }: { lists: HabitList[]; selec
       <div className="fixed bottom-8 right-8 z-50">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg">
+            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg" aria-label="Criar">
               <Plus className="h-6 w-6" />
             </Button>
           </DropdownMenuTrigger>
@@ -43,15 +39,13 @@ export function CreatorMenu({ lists, selectedDate }: { lists: HabitList[]; selec
         </DropdownMenu>
       </div>
 
-      <div className="hidden">
-        <HabitFormDialog lists={lists} externalOpen={openHabit} onExternalOpenChange={setOpenHabit} />
-        <TaskFormDialog
-          lists={lists}
-          defaultDate={selectedDate}
-          externalOpen={openTask}
-          onExternalOpenChange={setOpenTask}
-        />
-      </div>
+      <HabitFormDialog lists={lists} externalOpen={openHabit} onExternalOpenChange={setOpenHabit} />
+      <TaskFormDialog
+        lists={lists}
+        defaultDate={defaultDate}
+        externalOpen={openTask}
+        onExternalOpenChange={setOpenTask}
+      />
     </>
   );
 }

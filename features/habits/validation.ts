@@ -1,47 +1,41 @@
 import { z } from "zod";
+import { DEFAULT_HABIT_COLOR } from "@/lib/constants";
+import {
+  FREQUENCIES,
+  GOAL_POLARITIES,
+  HABIT_CATEGORIES,
+  PRIORITIES,
+  TRACKING_TYPES,
+} from "@/lib/types";
 
+// Campos numéricos opcionais chegam como `undefined` (veja optionalNumber em lib/numbers.ts).
 export const habitFormSchema = z
   .object({
-    name: z.string().min(1, "Digite um nome").max(60),
-    category: z.enum(["COUNT", "QUIT", "DIARY", "MOOD", "WEIGHT", "CUSTOM"]),
-    trackingType: z.enum(["NUMERIC", "CHECKLIST", "TIMER", "QUIT_STREAK", "MOOD_SCALE"]),
-    goalPolarity: z.enum(["POSITIVE", "NEGATIVE"]),
+    name: z.string().trim().min(1, "Digite um nome").max(60),
+    category: z.enum(HABIT_CATEGORIES),
+    trackingType: z.enum(TRACKING_TYPES),
+    goalPolarity: z.enum(GOAL_POLARITIES),
 
-    frequency: z.enum(["DAILY", "WEEKDAYS", "X_PER_WEEK"]),
-    weekdays: z.array(z.number().min(0).max(6)).optional(),
-    timesPerWeek: z.coerce.number().min(1).max(7).optional(),
-    timesPerDay: z.coerce.number().min(1).max(20).optional(),
+    frequency: z.enum(FREQUENCIES),
+    weekdays: z.array(z.number().int().min(0).max(6)).optional(),
+    timesPerWeek: z.number().int().min(1, "Mínimo 1").max(7, "Máximo 7").optional(),
+    timesPerDay: z.number().int().min(1, "Mínimo 1").max(20, "Máximo 20").optional(),
 
-    unit: z.string().max(20).optional(),
-    goal: z.coerce.number().positive().optional(),
-    color: z.string().default("#6366f1"),
+    unit: z.string().trim().max(20).optional(),
+    goal: z.number().positive("A meta deve ser maior que zero").optional(),
+    color: z.string().default(DEFAULT_HABIT_COLOR),
 
-    description: z.string().max(300).optional(),
+    description: z.string().trim().max(300).optional(),
     listId: z.string().optional(),
-    priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
+    priority: z.enum(PRIORITIES).default("MEDIUM"),
   })
-  .refine(
-    (data) => (data.frequency === "WEEKDAYS" ? (data.weekdays?.length ?? 0) > 0 : true),
-    { message: "Selecione ao menos um dia da semana", path: ["weekdays"] }
-  );
+  .refine((data) => data.frequency !== "WEEKDAYS" || (data.weekdays?.length ?? 0) > 0, {
+    message: "Selecione ao menos um dia da semana",
+    path: ["weekdays"],
+  })
+  .refine((data) => data.frequency !== "X_PER_WEEK" || data.timesPerWeek !== undefined, {
+    message: "Informe quantas vezes por semana",
+    path: ["timesPerWeek"],
+  });
 
 export type HabitFormValues = z.infer<typeof habitFormSchema>;
-
-export const FREQUENCY_LABELS: Record<string, string> = {
-  DAILY: "Todos os dias",
-  WEEKDAYS: "Dias específicos",
-  X_PER_WEEK: "X vezes por semana",
-};
-
-export const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-export const PRIORITY_LABELS: Record<string, string> = {
-  LOW: "Baixa",
-  MEDIUM: "Média",
-  HIGH: "Alta",
-};
-
-export const HABIT_COLORS = [
-  "#6366f1", "#ec4899", "#f97316", "#22c55e",
-  "#06b6d4", "#eab308", "#ef4444", "#8b5cf6",
-];

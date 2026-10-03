@@ -1,18 +1,13 @@
-import { TodayHeader } from "@/features/today/today-header";
 import { CreatorMenu } from "@/features/today/creator-menu";
 import { DailyHabitItem } from "@/features/today/daily-habit-item";
-import { TaskTodayItem } from "@/features/today/task-today-item";
-import { OverdueTasks } from "@/features/today/overdue-tasks";
 import { MeasurementList } from "@/features/today/measurement-list";
-import { MonthlyHabitStrip } from "@/features/today/monthly-habit-strip";
-import { getDailyHabitsForToday, getHabitLists } from "@/features/habits/queries";
+import { OverdueTasks } from "@/features/today/overdue-tasks";
+import { TaskTodayItem } from "@/features/today/task-today-item";
+import { TODAY_VIEWS, TodayHeader } from "@/features/today/today-header";
+import { getDailyHabits, getHabitLists } from "@/features/habits/queries";
+import { HabitHeatmapList } from "@/features/reports/habit-heatmap-list";
 import { getTasksForToday } from "@/features/tasks/queries";
-import { getPastYearGrid } from "@/lib/dates";
-import { isHabitScheduledForDate } from "@/lib/habit-schedule";
-import { getHabitsWithYearLogs } from "@/features/reports/queries";
-import { HabitHeatmap } from "@/features/reports/habit-heatmap";
-
-type ViewMode = "compact" | "monthly" | "yearly";
+import { parseDateParam, toDateParam } from "@/lib/dates";
 
 export default async function TodayPage({
   searchParams,
@@ -20,8 +15,8 @@ export default async function TodayPage({
   searchParams: Promise<{ view?: string; date?: string }>;
 }) {
   const params = await searchParams;
-  const view = (params.view ?? "compact") as ViewMode;
-  const selectedDate = params.date ? new Date(params.date + "T00:00:00") : new Date();
+  const view = TODAY_VIEWS.find((v) => v.value === params.view)?.value ?? "compact";
+  const selectedDate = parseDateParam(params.date);
   const lists = await getHabitLists();
 
   return (
@@ -29,18 +24,20 @@ export default async function TodayPage({
       <TodayHeader currentView={view} selectedDate={selectedDate} />
 
       {view === "compact" && <CompactView date={selectedDate} />}
-      {view === "monthly" && <MonthlyHabitStrip />}
-      {view === "yearly" && <YearlyView />}
+      {view === "monthly" && (
+        <HabitHeatmapList weeksCount={5} emptyMessage="Nenhum hábito ainda." />
+      )}
+      {view === "yearly" && (
+        <HabitHeatmapList weeksCount={53} emptyMessage="Nenhum hábito ainda." />
+      )}
 
-      <CreatorMenu lists={lists} selectedDate={selectedDate} />
+      <CreatorMenu lists={lists} defaultDate={toDateParam(selectedDate)} />
     </div>
   );
 }
 
 async function CompactView({ date }: { date: Date }) {
-  const habitsRaw = await getDailyHabitsForToday(date);
-  const habits = habitsRaw.filter((h) => isHabitScheduledForDate(h, date));
-  const tasks = await getTasksForToday(date);
+  const [habits, tasks] = await Promise.all([getDailyHabits(date), getTasksForToday(date)]);
 
   return (
     <div className="space-y-6">
@@ -77,23 +74,6 @@ async function CompactView({ date }: { date: Date }) {
       </section>
 
       <MeasurementList />
-    </div>
-  );
-}
-
-async function YearlyView() {
-  const grid = getPastYearGrid();
-  const rangeStart = grid[0][0];
-  const rangeEnd = grid[grid.length - 1][6];
-  const habits = await getHabitsWithYearLogs(rangeStart, rangeEnd);
-
-  return (
-    <div className="space-y-4">
-      {habits.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">Nenhum hábito ainda.</p>
-      ) : (
-        habits.map((habit) => <HabitHeatmap key={habit.id} habit={habit} />)
-      )}
     </div>
   );
 }

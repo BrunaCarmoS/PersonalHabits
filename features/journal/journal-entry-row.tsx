@@ -5,7 +5,7 @@ import { StickyNote, Plus, CheckCircle2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { deleteActivityEntry } from "./actions";
 import { formatTime } from "@/lib/dates";
-import type { ActivityEntry } from "./queries";
+import type { ActivityEntry } from "./types";
 
 const KIND_LABELS: Record<string, string> = {
   habit_created: "Hábito criado",
@@ -22,7 +22,7 @@ export function JournalEntryRow({ entry }: { entry: ActivityEntry }) {
       : "Remover este registro do histórico?";
 
     if (!window.confirm(message)) return;
-    startTransition(() => deleteActivityEntry(entry.id));
+    startTransition(() => deleteActivityEntry(entry.kind, entry.sourceId));
   }
 
   return (
@@ -78,6 +78,7 @@ export function JournalEntryRow({ entry }: { entry: ActivityEntry }) {
         onClick={handleDelete}
         disabled={isPending}
         title="Remover do histórico"
+        aria-label="Remover do histórico"
         className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
       >
         <Trash2 className="h-3.5 w-3.5" />

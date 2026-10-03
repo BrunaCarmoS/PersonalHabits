@@ -2,11 +2,12 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getWeekDays, formatWeekdayShort, isToday, isSameDate, toDateParam } from "@/lib/dates";
 
-const VIEWS = [
+/** Visões da tela de hoje (exportado para a página validar o ?view=). */
+export const TODAY_VIEWS = [
   { value: "compact", label: "Compacta" },
   { value: "monthly", label: "Mensal" },
   { value: "yearly", label: "Anual" },
-];
+] as const;
 
 export function TodayHeader({
   currentView,
@@ -22,7 +23,7 @@ export function TodayHeader({
       <div className="flex items-center justify-between">
         <h1 className="font-serif text-3xl font-medium tracking-tight">Visão de hoje</h1>
         <div className="flex gap-1 rounded-full border bg-card p-1">
-          {VIEWS.map((v) => (
+          {TODAY_VIEWS.map((v) => (
             <Link
               key={v.value}
               href={`/today?view=${v.value}&date=${toDateParam(selectedDate)}`}

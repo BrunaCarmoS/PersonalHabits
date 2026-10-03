@@ -1,64 +1,49 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { refreshApp } from "@/lib/revalidate";
+import { ACTIVITY_KINDS, type ActivityKind } from "./types";
 
-export async function createJournalNote(content: string, habitId?: string, taskId?: string, listId?: string) {
+export async function createJournalNote(
+  content: string,
+  habitId?: string,
+  taskId?: string,
+  listId?: string
+) {
+  const text = content.trim();
+  if (!text) throw new Error("A nota está vazia.");
+  if (text.length > 10_000) throw new Error("A nota é grande demais.");
+
   await prisma.journalEntry.create({
-    data: {
-      content,
-      habitId: habitId || null,
-      taskId: taskId || null,
-      listId: listId || null,
-    },
+    data: { content: text, habitId: habitId || null, taskId: taskId || null, listId: listId || null },
   });
-
-  revalidatePath("/journal");
+  refreshApp();
 }
 
-export async function deleteJournalNote(id: string) {
-  await prisma.journalEntry.delete({ where: { id } });
-  revalidatePath("/journal");
-}
+/** Remove um item do histórico. O que isso significa depende do tipo do item. */
+export async function deleteActivityEntry(kind: ActivityKind, sourceId: string) {
+  if (!(ACTIVITY_KINDS as readonly string[]).includes(kind)) throw new Error("Tipo inválido.");
 
-export async function deleteActivityEntry(entryId: string) {
-  if (entryId.startsWith("habit-created-")) {
-    const habitId = entryId.replace("habit-created-", "");
-    await prisma.habit.delete({ where: { id: habitId } }).catch(() => {});
-    revalidatePath("/journal");
-    revalidatePath("/habits");
-    revalidatePath("/today");
-    revalidatePath("/calendar");
-    revalidatePath("/reports");
-    return;
+  switch (kind) {
+    case "habit":
+    case "measurement":
+      await prisma.habitLog.deleteMany({ where: { id: sourceId } });
+      break;
+    case "task": // desfaz a conclusão
+      await prisma.task.updateMany({
+        where: { id: sourceId },
+        data: { completed: false, completedAt: null },
+      });
+      break;
+    case "note":
+      await prisma.journalEntry.deleteMany({ where: { id: sourceId } });
+      break;
+    case "habit_created": // apaga o hábito e todo o histórico dele
+      await prisma.habit.deleteMany({ where: { id: sourceId } });
+      break;
+    case "task_created":
+      await prisma.task.deleteMany({ where: { id: sourceId } });
+      break;
   }
-
-  if (entryId.startsWith("task-created-")) {
-    const taskId = entryId.replace("task-created-", "");
-    await prisma.task.delete({ where: { id: taskId } }).catch(() => {});
-    revalidatePath("/journal");
-    revalidatePath("/tasks");
-    revalidatePath("/today");
-    revalidatePath("/calendar");
-    return;
-  }
-
-  const [prefix, ...rest] = entryId.split("-");
-  const realId = rest.join("-");
-
-  if (prefix === "habit") {
-    await prisma.habitLog.delete({ where: { id: realId } }).catch(() => {});
-  } else if (prefix === "task") {
-    await prisma.task.update({
-      where: { id: realId },
-      data: { completed: false, completedAt: null },
-    }).catch(() => {});
-  } else if (prefix === "note") {
-    await prisma.journalEntry.delete({ where: { id: realId } }).catch(() => {});
-  }
-
-  revalidatePath("/journal");
-  revalidatePath("/today");
-  revalidatePath("/tasks");
-  revalidatePath("/habits");
+  refreshApp();
 }

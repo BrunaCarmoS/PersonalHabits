@@ -1,24 +1,29 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { parseDateParam } from "@/lib/dates";
+import { refreshApp } from "@/lib/revalidate";
 import { taskFormSchema, type TaskFormValues } from "./validation";
 
-export async function createTask(values: TaskFormValues) {
+function buildTaskData(values: TaskFormValues) {
   const parsed = taskFormSchema.parse(values);
+  return {
+    title: parsed.title,
+    description: parsed.description || null,
+    dueDate: parsed.dueDate ? parseDateParam(parsed.dueDate) : null,
+    priority: parsed.priority,
+    listId: parsed.listId || null,
+  };
+}
 
-  await prisma.task.create({
-    data: {
-      title: parsed.title,
-      description: parsed.description || null,
-      dueDate: parsed.dueDate ?? null,
-      priority: parsed.priority,
-      listId: parsed.listId || null,
-    },
-  });
+export async function createTask(values: TaskFormValues) {
+  await prisma.task.create({ data: buildTaskData(values) });
+  refreshApp();
+}
 
-  revalidatePath("/habits");
-  revalidatePath("/today");
+export async function updateTask(id: string, values: TaskFormValues) {
+  await prisma.task.update({ where: { id }, data: buildTaskData(values) });
+  refreshApp();
 }
 
 export async function toggleTaskCompleted(id: string, completed: boolean) {
@@ -26,31 +31,10 @@ export async function toggleTaskCompleted(id: string, completed: boolean) {
     where: { id },
     data: { completed, completedAt: completed ? new Date() : null },
   });
-  revalidatePath("/today");
-  revalidatePath("/habits");
+  refreshApp();
 }
 
 export async function deleteTask(id: string) {
   await prisma.task.delete({ where: { id } });
-  revalidatePath("/today");
-  revalidatePath("/habits");
-}
-
-export async function updateTask(id: string, values: TaskFormValues) {
-  const parsed = taskFormSchema.parse(values);
-
-  await prisma.task.update({
-    where: { id },
-    data: {
-      title: parsed.title,
-      description: parsed.description || null,
-      dueDate: parsed.dueDate ?? null,
-      priority: parsed.priority,
-      listId: parsed.listId || null,
-    },
-  });
-
-  revalidatePath("/today");
-  revalidatePath("/tasks");
-  revalidatePath("/calendar");
+  refreshApp();
 }

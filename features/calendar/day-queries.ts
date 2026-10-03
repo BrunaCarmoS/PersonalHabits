@@ -7,7 +7,7 @@ export async function getDayData(date: Date) {
 
   const [habits, tasks] = await Promise.all([
     prisma.habit.findMany({
-      where: { active: true },
+      where: { active: true, category: { not: "QUIT" } },
       include: { logs: { where: { date: dateOnly } } },
     }),
     prisma.task.findMany({

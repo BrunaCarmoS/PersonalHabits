@@ -1,115 +1,68 @@
 "use client";
 
 import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, useWatch } from "react-hook-form";
 import { Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
+import { Label } from "@/components/ui/label";
+import { ListField } from "@/features/lists/list-field";
+import { typedResolver } from "@/lib/form";
+import type { ListOption } from "@/lib/types";
 import { updateHabit } from "./actions";
 import {
-  habitFormSchema,
-  type HabitFormValues,
-  FREQUENCY_LABELS,
-  WEEKDAY_LABELS,
-  PRIORITY_LABELS,
-  HABIT_COLORS,
-} from "./validation";
-import { getTemplate } from "./habit-templates";
-import { cn } from "@/lib/utils";
+  AdvancedFields,
+  ColorPicker,
+  FrequencyFields,
+  NumericFields,
+} from "./habit-form-fields";
+import { habitToFormValues, type EditableHabit } from "./habit-form-values";
+import { habitFormSchema, type HabitFormValues } from "./validation";
 
-interface HabitList {
-  id: string;
-  name: string;
-}
-
-interface HabitData {
-  id: string;
-  name: string;
-  description: string | null;
-  category: string;
-  trackingType: string;
-  goalPolarity: string;
-  frequency: string;
-  weekdays: string | null;
-  timesPerWeek: number | null;
-  timesPerDay: number | null;
-  unit: string | null;
-  goal: number | null;
-  color: string;
-  priority: string;
-  listId: string | null;
-}
-
-export function HabitEditDialog({ habit, lists }: { habit: HabitData; lists: HabitList[] }) {
+export function HabitEditDialog({ habit, lists }: { habit: EditableHabit; lists: ListOption[] }) {
   const [open, setOpen] = useState(false);
-  const template = getTemplate(habit.category as any);
 
+  const form = useForm<HabitFormValues>({
+    resolver: typedResolver<HabitFormValues>(habitFormSchema),
+    defaultValues: habitToFormValues(habit),
+  });
   const {
     register,
     handleSubmit,
     control,
-    watch,
-    setValue,
-    getValues,
+    reset,
+    setError,
     formState: { errors, isSubmitting },
-  } = useForm<HabitFormValues>({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(habitFormSchema) as any,
-    defaultValues: {
-      name: habit.name,
-      category: habit.category as any,
-      trackingType: habit.trackingType as any,
-      goalPolarity: habit.goalPolarity as any,
-      frequency: habit.frequency as any,
-      weekdays: habit.weekdays ? habit.weekdays.split(",").map(Number) : [],
-      timesPerWeek: habit.timesPerWeek ?? undefined,
-      timesPerDay: habit.timesPerDay ?? undefined,
-      unit: habit.unit ?? undefined,
-      goal: habit.goal ?? undefined,
-      color: habit.color,
-      description: habit.description ?? undefined,
-      listId: habit.listId ?? undefined,
-      priority: habit.priority as any,
-    },
-  });
+  } = form;
 
-  const frequency = watch("frequency");
-  const weekdays = watch("weekdays") ?? [];
-  const color = watch("color");
+  const trackingType = useWatch({ control, name: "trackingType" });
+  const hasNumbers = trackingType === "NUMERIC" || trackingType === "TIMER";
 
-  function toggleWeekday(day: number) {
-    const current = getValues("weekdays") ?? [];
-    const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day];
-    setValue("weekdays", next);
+  function handleOpenChange(next: boolean) {
+    if (next) reset(habitToFormValues(habit)); // sempre abre com os dados atuais
+    setOpen(next);
   }
 
   async function onSubmit(values: HabitFormValues) {
-    await updateHabit(habit.id, values);
-    setOpen(false);
+    try {
+      await updateHabit(habit.id, values);
+      setOpen(false);
+    } catch {
+      setError("root", { message: "Não foi possível salvar. Tente de novo." });
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Button variant="ghost" size="icon" onClick={() => setOpen(true)} title="Editar">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Button variant="ghost" size="icon" onClick={() => handleOpenChange(true)} title="Editar">
         <Pencil className="h-4 w-4" />
       </Button>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
@@ -124,141 +77,13 @@ export function HabitEditDialog({ habit, lists }: { habit: HabitData; lists: Hab
             {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
           </div>
 
-          {(watch("trackingType") === "NUMERIC" || watch("trackingType") === "TIMER") && (
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="unit">Unidade (opcional)</Label>
-                <Input id="unit" {...register("unit")} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="goal">Meta (opcional)</Label>
-                <Input id="goal" type="number" step="any" {...register("goal")} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="timesPerDay">Vezes/dia</Label>
-                <Input id="timesPerDay" type="number" min={1} {...register("timesPerDay")} />
-              </div>
-            </div>
-          )}
+          {hasNumbers && <NumericFields form={form} />}
+          {habit.category !== "QUIT" && <FrequencyFields form={form} />}
+          <ColorPicker form={form} />
+          <ListField control={control} name="listId" lists={lists} />
+          <AdvancedFields form={form} />
 
-          <div className="space-y-1.5">
-            <Label>Frequência</Label>
-            <Controller
-              control={control}
-              name="frequency"
-              render={({ field }) => (
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
-
-          {frequency === "WEEKDAYS" && (
-            <div>
-              <Label>Dias da semana</Label>
-              <div className="flex gap-1.5 mt-2">
-                {WEEKDAY_LABELS.map((label, day) => (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => toggleWeekday(day)}
-                    className={cn(
-                      "h-9 w-9 rounded-full text-xs font-medium border transition-colors",
-                      weekdays.includes(day)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-input hover:bg-muted"
-                    )}
-                  >
-                    {label[0]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {frequency === "X_PER_WEEK" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="timesPerWeek">Vezes por semana</Label>
-              <Input id="timesPerWeek" type="number" min={1} max={7} {...register("timesPerWeek")} />
-            </div>
-          )}
-
-          <div>
-            <Label>Cor</Label>
-            <div className="flex gap-2 mt-2">
-              {HABIT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setValue("color", c)}
-                  style={{ backgroundColor: c }}
-                  className={cn(
-                    "h-7 w-7 rounded-full border-2 transition-transform",
-                    color === c ? "border-foreground scale-110" : "border-transparent"
-                  )}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="description">Descrição</Label>
-            <Textarea id="description" {...register("description")} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Lista</Label>
-            <Controller
-              control={control}
-              name="listId"
-              render={({ field }) => (
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Nenhuma lista" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {lists.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Prioridade</Label>
-            <Controller
-              control={control}
-              name="priority"
-              render={({ field }) => (
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
+          {errors.root && <p className="text-sm text-destructive">{errors.root.message}</p>}
 
           <DialogFooter>
             <Button type="submit" disabled={isSubmitting}>
